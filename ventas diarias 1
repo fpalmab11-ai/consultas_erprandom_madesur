@@ -1,0 +1,120 @@
+= Sql.Database("madesurdb.random.cl,8402", "rd103bd01", [
+    Query = "
+WITH FechaAñoAnterior AS (
+    SELECT 
+        DATEFROMPARTS(YEAR(GETDATE()) - 1, MONTH(GETDATE()), 1) AS InicioMesAñoAnterior,
+        EOMONTH(DATEFROMPARTS(YEAR(GETDATE()) - 1, MONTH(GETDATE()), 1)) AS FinMesAñoAnterior
+)
+
+SELECT 
+    D.EMPRESA,
+    FG.RAZON AS RAZON_SOCIAL,
+    D.SULIDO AS SUC,
+    SU.NOKOSU AS NOMSUC,
+    D.BOSULIDO AS BOD,
+    BO.NOKOBO AS NOMBOD,
+    (LEFT(EN.RTEN, 8) + '-' + [dbo].ObtenerDigitoVerificador(EN.RTEN)) AS RUT,
+    EN.NOKOEN AS RSOCIAL,
+    D.TIDO AS TIPODOC,
+    D.NUDO AS NUMDOC,
+    D.TIDOPA AS TIDOPASIVO,
+    D.NUDOPA AS NUDOPASIVO,
+    CONVERT(CHAR(10), E.FEEMDO, 103) AS FECHA,
+    CONVERT(CHAR(8), DATEADD(ss, E.HORAGRAB, '19000101'), 114) AS HORA,
+    YEAR(E.FEEMDO) AS AN,
+    MONTH(E.FEEMDO) AS MES,
+    DATEPART(ISO_WEEK, E.FEEMDO) AS SEMANA,
+    PR.FMPR AS FAM,
+    FM.NOKOFM AS NOMFAM,
+    D.KOPRCT AS CODIGO,
+    D.NOKOPR AS DESCRIPCION,
+    (TT.FIAD * -1) * D.CAPRCO1 AS CAN_UD1,
+    D.UD01PR AS UD1,
+    D.RLUDPR AS RTU,
+    (TT.FIAD * -1) * D.CAPRCO2 AS CAN_UD2,
+    D.UD02PR AS UD2,
+    (TT.FIAD * -1) * D.PPPRNERE1 AS NetoUni,
+
+    -- Cálculo del costo unitario
+    (TT.FIAD * -1) * 
+    CASE 
+        WHEN D.PPOPPR = 0 AND (1 + (D.MGLTPR / 100)) = 0 THEN 100
+        WHEN D.PPOPPR = 0 THEN ROUND(D.PPPRNELT / (1 + (D.MGLTPR / 100)), 2)
+        ELSE ROUND((D.PPOPPR / 1.03), 2)
+    END 
+    * CASE 
+        WHEN D.UDTRPR = 1 THEN 1 
+        ELSE (1 / D.RLUDPR) 
+    END AS CostoUni,
+
+    -- Margen unitario
+    (TT.FIAD * -1) * (
+        D.PPPRNERE1 - 
+        CASE 
+            WHEN D.PPOPPR = 0 AND (1 + (D.MGLTPR / 100)) = 0 THEN 100
+            WHEN D.PPOPPR = 0 THEN ROUND(D.PPPRNELT / (1 + (D.MGLTPR / 100)), 2)
+            ELSE ROUND((D.PPOPPR / 1.03), 2)
+        END 
+        * CASE 
+            WHEN D.UDTRPR = 1 THEN 1 
+            ELSE 1 / D.RLUDPR 
+        END
+    ) AS MgUni,
+
+    -- Neto línea
+    (TT.FIAD * -1) * D.VANELI AS NetoLinea,
+
+    -- Costo total
+    (D.CAPRCO1 * (TT.FIAD * -1)) * 
+    CASE 
+        WHEN D.PPOPPR = 0 AND (1 + (D.MGLTPR / 100)) = 0 THEN 100
+        WHEN D.PPOPPR = 0 THEN ROUND(D.PPPRNELT / (1 + (D.MGLTPR / 100)), 2)
+        ELSE ROUND((D.PPOPPR / 1.03), 2)
+    END 
+    * CASE 
+        WHEN D.UDTRPR = 1 THEN 1 
+        ELSE (1 / D.RLUDPR) 
+    END AS CostoTot,
+
+    -- Margen total
+    ((TT.FIAD * -1) * D.VANELI) - 
+    (D.CAPRCO1 * (TT.FIAD * -1)) * 
+    CASE 
+        WHEN D.PPOPPR = 0 AND (1 + (D.MGLTPR / 100)) = 0 THEN 100
+        WHEN D.PPOPPR = 0 THEN ROUND(D.PPPRNELT / (1 + (D.MGLTPR / 100)), 2)
+        ELSE ROUND((D.PPOPPR / 1.03), 2)
+    END 
+    * CASE 
+        WHEN D.UDTRPR = 1 THEN 1 
+        ELSE (1 / D.RLUDPR) 
+    END AS MgTotal,
+
+    D.MGLTPR AS MgLprecio,
+    D.KOFULIDO AS COD_VEND,
+    FU.NOKOFU AS NomVendedor,
+    EN.RUEN AS CodRubro,
+    RU.NOKORU AS NomRubro
+
+FROM 
+    MAEDDO AS D
+    INNER JOIN CONFIGP AS FG ON D.EMPRESA = FG.EMPRESA
+    LEFT JOIN MAEEN AS EN ON D.ENDO = EN.KOEN AND EN.TIPOSUC = 'P'
+    INNER JOIN MAEEDO AS E ON D.IDMAEEDO = E.IDMAEEDO
+    INNER JOIN TABSU AS SU ON E.EMPRESA + E.SUDO = SU.EMPRESA + SU.KOSU
+    INNER JOIN TABBO AS BO ON D.EMPRESA + D.SULIDO + D.BOSULIDO = BO.EMPRESA + BO.KOSU + BO.KOBO
+    LEFT JOIN MAEEDOOB AS OB ON E.IDMAEEDO = OB.IDMAEEDO
+    LEFT JOIN TABCARAC AS CA ON OB.MOTIVO = CA.KOCARAC AND E.TIDO = SUBSTRING(KOTABLA, 8, 3)
+    INNER JOIN MAEPR AS PR ON D.KOPRCT = PR.KOPR
+    LEFT JOIN TABFM AS FM ON PR.FMPR = FM.KOFM
+    LEFT JOIN TABFU AS FU ON D.KOFULIDO = FU.KOFU
+    INNER JOIN TABTIDO AS TT ON E.TIDO = TT.TIDO
+    LEFT JOIN TABRU AS RU ON EN.RUEN = RU.KORU AND EN.TIPOSUC = 'P'
+    INNER JOIN FechaAñoAnterior ON 1 = 1
+
+WHERE 
+    D.TIDO IN ('FCV', 'BLV', 'NCV', 'FDV', 'FVT') AND
+    D.LILG IN ('SI', 'CR') AND
+    E.NUDONODEFI = '0' AND
+    E.FEEMDO BETWEEN FechaAñoAnterior.InicioMesAñoAnterior AND FechaAñoAnterior.FinMesAñoAnterior
+"
+])
